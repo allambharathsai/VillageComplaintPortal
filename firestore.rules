@@ -1,103 +1,179 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isSignedIn() {
+    // Check authentication
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+    // Get the signed-in user's profile
+    function userData() {
+      return get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isPanchayatStaffFor(villageId) {
-      return isSignedIn() && 
-        getUserData().role == 'panchayat' && 
-        getUserData().villageId == villageId;
-    }
-
+    // Check admin role
     function isAdmin() {
-      return isSignedIn() && 
-        (getUserData().role == 'admin' || request.auth.token.email == 'admin@villageportal.gov.in');
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userData().role == 'admin';
     }
 
-    function isValidComplaint(data) {
-      return data.complaintId is string &&
-        data.villageId is string &&
-        data.villageCode is string &&
-        data.problemType in ['drain', 'stagnant_water', 'mosquito', 'street_light', 'waste_collection', 'drinking_water', 'other'] &&
-        data.laneName is string &&
-        data.laneName.size() > 0 &&
-        data.laneName.size() <= 200 &&
-        data.residentUid is string &&
-        data.residentMobile is string &&
-        data.status in ['received', 'in_progress', 'resolved'] &&
-        (!('description' in data) || (data.description is string && data.description.size() <= 500));
+    // Check Panchayat village access
+    function isPanchayat(villageId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userData().role == 'panchayat' &&
+        userData().villageId == villageId;
     }
 
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
+    // Validate complaint data
+    function validComplaint(data) {
+      return data.keys().hasAll([
+        'complaintId',
+        'villageId',
+        'villageCode',
+        'problemType',
+        'description',
+        'laneName',
+        'location',
+        'status',
+        'statusHistory',
+        'residentUid',
+        'residentMobile',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'complaintId',
+        'villageId',
+        'villageCode',
+        'problemType',
+        'description',
+        'laneName',
+        'photoUrl',
+        'location',
+        'status',
+        'remarks',
+        'statusHistory',
+        'residentUid',
+        'residentMobile',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.complaintId is string &&
+      data.villageId is string &&
+      data.villageCode is string &&
+      data.problemType in [
+        'drain',
+        'stagnant_water',
+        'mosquito',
+        'street_light',
+        'waste_collection',
+        'drinking_water',
+        'other'
+      ] &&
+      data.description is string &&
+      data.description.size() <= 500 &&
+      data.laneName is string &&
+      data.laneName.size() > 0 &&
+      data.laneName.size() <= 200 &&
+      data.residentUid is string &&
+      data.residentMobile is string &&
+      data.location is map &&
+      data.location.verified is bool &&
+      data.status == 'received' &&
+      data.statusHistory is list &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp &&
+      (
+        data.problemType == 'other' ||
+        (
+          'photoUrl' in data &&
+          data.photoUrl is string &&
+          data.photoUrl.size() > 0
+        )
+      ) &&
+      exists(
+        /databases/$(database)/documents/villages/$(data.villageId)
+      );
     }
 
-    // Villages collection: public read, admin write
+    // Villages
     match /villages/{villageId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // Users collection: user owns their document, admin can manage
+    // User profiles
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+
+      allow get: if signedIn() &&
+        (request.auth.uid == userId || isAdmin());
+
       allow list: if isAdmin();
-      allow create: if isSignedIn() && request.auth.uid == userId && 
-        (!('role' in request.resource.data) || request.resource.data.role == 'resident' || isAdmin());
-      allow update: if isOwner(userId) && 
-        request.resource.data.role == resource.data.role && 
-        (!('villageId' in resource.data) || request.resource.data.villageId == resource.data.villageId);
-      allow delete: if isAdmin();
-    }
 
-    // Complaints collection
-    match /complaints/{complaintDocId} {
-      // Resident reads own complaints; Panchayat staff reads their village complaints
-      allow get: if true; // Allows tracking page with complaintId + phone match, or authenticated fetch
-      allow list: if isSignedIn() && (
-        resource.data.residentUid == request.auth.uid ||
-        isPanchayatStaffFor(resource.data.villageId) ||
-        isAdmin()
-      );
+      // Residents can create only their own resident profile.
+      // Panchayat and admin profiles must be created by an administrator.
+      allow create: if signedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == userId &&
+        request.resource.data.role == 'resident' &&
+        request.resource.data.keys().hasOnly([
+          'uid', 'role', 'mobile', 'createdAt'
+        ]);
 
-      // Create complaint: Signed-in resident submitting for themselves
-      allow create: if isSignedIn() &&
-        isValidComplaint(request.resource.data) &&
-        request.resource.data.residentUid == request.auth.uid &&
-        request.resource.data.status == 'received';
+      // Users cannot change their own role or village assignment.
+      allow update: if isAdmin();
 
-      // Update complaint: ONLY Panchayat staff of that village can update status and remarks
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        (
-          isPanchayatStaffFor(resource.data.villageId) &&
-          request.resource.data.villageId == resource.data.villageId &&
-          request.resource.data.complaintId == resource.data.complaintId &&
-          request.resource.data.residentUid == resource.data.residentUid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'remarks', 'statusHistory', 'updatedAt'])
-        )
-      );
-
-      // No deletion allowed from client
       allow delete: if false;
     }
 
-    // Counters collection: for sequential ID generation
-    match /counters/{counterId} {
-      allow read, write: if isSignedIn();
+    // Complaints
+    match /complaints/{complaintDocId} {
+
+      // Residents see their own complaints.
+      // Panchayat sees only complaints from its assigned village.
+      allow get, list: if signedIn() && (
+        resource.data.residentUid == request.auth.uid ||
+        isPanchayat(resource.data.villageId) ||
+        isAdmin()
+      );
+
+      // Residents can submit complaints for themselves.
+      allow create: if signedIn() &&
+        validComplaint(request.resource.data) &&
+        request.resource.data.residentUid == request.auth.uid &&
+        request.resource.data.status == 'received';
+
+      // Only the assigned Panchayat can update complaint status.
+      allow update: if signedIn() &&
+        isPanchayat(resource.data.villageId) &&
+        request.resource.data.villageId == resource.data.villageId &&
+        request.resource.data.residentUid == resource.data.residentUid &&
+        request.resource.data.complaintId == resource.data.complaintId &&
+        request.resource.data.status in [
+          'received', 'in_progress', 'resolved'
+        ] &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'status', 'remarks', 'statusHistory', 'updatedAt'
+          ]);
+
+      // Complaints cannot be deleted from the client.
+      allow delete: if false;
     }
+
+    // Complaint counters are server-managed.
+    // Use a trusted Cloud Function with the Admin SDK.
+    match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
   }
 }
