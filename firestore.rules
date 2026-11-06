@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isPanchayatStaffFor(villageId) {
+      return isSignedIn() && 
+        getUserData().role == 'panchayat' && 
+        getUserData().villageId == villageId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+        (getUserData().role == 'admin' || request.auth.token.email == 'admin@villageportal.gov.in');
+    }
+
+    function isValidComplaint(data) {
+      return data.complaintId is string &&
+        data.villageId is string &&
+        data.villageCode is string &&
+        data.problemType in ['drain', 'stagnant_water', 'mosquito', 'street_light', 'waste_collection', 'drinking_water', 'other'] &&
+        data.laneName is string &&
+        data.laneName.size() > 0 &&
+        data.laneName.size() <= 200 &&
+        data.residentUid is string &&
+        data.residentMobile is string &&
+        data.status in ['received', 'in_progress', 'resolved'] &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 500));
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Villages collection: public read, admin write
+    match /villages/{villageId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Users collection: user owns their document, admin can manage
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId && 
+        (!('role' in request.resource.data) || request.resource.data.role == 'resident' || isAdmin());
+      allow update: if isOwner(userId) && 
+        request.resource.data.role == resource.data.role && 
+        (!('villageId' in resource.data) || request.resource.data.villageId == resource.data.villageId);
+      allow delete: if isAdmin();
+    }
+
+    // Complaints collection
+    match /complaints/{complaintDocId} {
+      // Resident reads own complaints; Panchayat staff reads their village complaints
+      allow get: if true; // Allows tracking page with complaintId + phone match, or authenticated fetch
+      allow list: if isSignedIn() && (
+        resource.data.residentUid == request.auth.uid ||
+        isPanchayatStaffFor(resource.data.villageId) ||
+        isAdmin()
+      );
+
+      // Create complaint: Signed-in resident submitting for themselves
+      allow create: if isSignedIn() &&
+        isValidComplaint(request.resource.data) &&
+        request.resource.data.residentUid == request.auth.uid &&
+        request.resource.data.status == 'received';
+
+      // Update complaint: ONLY Panchayat staff of that village can update status and remarks
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          isPanchayatStaffFor(resource.data.villageId) &&
+          request.resource.data.villageId == resource.data.villageId &&
+          request.resource.data.complaintId == resource.data.complaintId &&
+          request.resource.data.residentUid == resource.data.residentUid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'remarks', 'statusHistory', 'updatedAt'])
+        )
+      );
+
+      // No deletion allowed from client
+      allow delete: if false;
+    }
+
+    // Counters collection: for sequential ID generation
+    match /counters/{counterId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

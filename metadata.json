@@ -1,0 +1,10 @@
+{
+  "name": "Village Complaint Portal - గ్రామ ఫిర్యాదుల పోర్టల్",
+  "description": "Mobile-first rural civic grievance portal for Gram Panchayats. Residents easily report sanitation, drainage, street light, and water issues with GPS-stamped photos and Telugu voice input.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

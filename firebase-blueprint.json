@@ -1,0 +1,200 @@
+{
+  "entities": {
+    "Village": {
+      "title": "Village",
+      "description": "Gram Panchayat village entity in Andhra Pradesh",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the village"
+        },
+        "name": {
+          "type": "string",
+          "description": "Village name in English"
+        },
+        "nameTe": {
+          "type": "string",
+          "description": "Village name in Telugu"
+        },
+        "mandal": {
+          "type": "string",
+          "description": "Mandal name (e.g., G.Konduru)"
+        },
+        "district": {
+          "type": "string",
+          "description": "District name (e.g., NTR District)"
+        },
+        "pinCode": {
+          "type": "string",
+          "description": "Postal PIN code (e.g., 521230)"
+        },
+        "code": {
+          "type": "string",
+          "description": "Short code prefix for complaints (e.g., GRP)"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Default village center latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Default village center longitude"
+        }
+      },
+      "required": ["id", "name", "nameTe", "mandal", "district", "code"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role-based access for residents, panchayat staff, and admins",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user identifier"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["resident", "panchayat", "admin"],
+          "description": "Role of the user in the portal"
+        },
+        "mobile": {
+          "type": "string",
+          "description": "10-digit Indian phone number"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address for panchayat staff or admin"
+        },
+        "villageId": {
+          "type": "string",
+          "description": "Linked village ID (mandatory for panchayat staff)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of resident or officer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account creation timestamp"
+        }
+      },
+      "required": ["uid", "role", "createdAt"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Civic grievance submitted by rural resident to their Gram Panchayat",
+      "type": "object",
+      "properties": {
+        "complaintId": {
+          "type": "string",
+          "description": "Formatted sequential ID (e.g. GRP-20261106-0001)"
+        },
+        "villageId": {
+          "type": "string",
+          "description": "ID of targeted Gram Panchayat village"
+        },
+        "villageCode": {
+          "type": "string",
+          "description": "Village code prefix (e.g. GRP)"
+        },
+        "problemType": {
+          "type": "string",
+          "enum": ["drain", "stagnant_water", "mosquito", "street_light", "waste_collection", "drinking_water", "other"],
+          "description": "Category of grievance"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Voice or typed description in Telugu or English"
+        },
+        "laneName": {
+          "type": "string",
+          "description": "Specific street, lane, colony, or landmark"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Uploaded GPS photo URL in Firebase Storage"
+        },
+        "location": {
+          "type": "object",
+          "description": "GPS coordinates and accuracy at capture time",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "accuracy": { "type": "number" },
+            "capturedAt": { "type": "string" },
+            "verified": { "type": "boolean" }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["received", "in_progress", "resolved"],
+          "description": "Current resolution status"
+        },
+        "remarks": {
+          "type": "string",
+          "description": "Latest remark from Panchayat officer"
+        },
+        "statusHistory": {
+          "type": "array",
+          "description": "Audit trail of status transitions"
+        },
+        "residentUid": {
+          "type": "string",
+          "description": "UID of resident creator"
+        },
+        "residentMobile": {
+          "type": "string",
+          "description": "Resident contact mobile number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["complaintId", "villageId", "villageCode", "problemType", "laneName", "status", "residentUid", "residentMobile"]
+    },
+    "Counter": {
+      "title": "Counter",
+      "description": "Daily sequential complaint counter per village",
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Date string YYYYMMDD"
+        },
+        "villageCode": {
+          "type": "string"
+        },
+        "lastSequence": {
+          "type": "integer"
+        }
+      },
+      "required": ["date", "villageCode", "lastSequence"]
+    }
+  },
+  "firestore": {
+    "/villages/{villageId}": {
+      "schema": { "$ref": "#/entities/Village" },
+      "description": "Public list of registered Gram Panchayats and pilot villages"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles for residents, panchayat staff, and admins"
+    },
+    "/complaints/{complaintDocId}": {
+      "schema": { "$ref": "#/entities/Complaint" },
+      "description": "Civic complaints submitted to Gram Panchayats"
+    },
+    "/counters/{counterId}": {
+      "schema": { "$ref": "#/entities/Counter" },
+      "description": "Sequential complaint number counters per village per day"
+    }
+  }
+}
