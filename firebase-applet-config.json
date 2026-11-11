@@ -1,0 +1,12 @@
+{
+  "projectId": "village-complaint-portal",
+  "appId": "1:69915324050:web:96c5d4cad022e80afe804b",
+  "apiKey": "AIzaSyCNCI6J-mX5dFKI0Qd8lkJ9Ci1R6GPQQ1s",
+  "authDomain": "village-complaint-portal.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-villagecomplaint-aeaf8e77-37fd-407b-adac-d46418f88547",
+  "storageBucket": "village-complaint-portal.firebasestorage.app",
+  "messagingSenderId": "69915324050",
+  "measurementId": "",
+  "oAuthClientId": "69915324050-95c6oj9idfh6v2lnfsniqvucrk55r7b1.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

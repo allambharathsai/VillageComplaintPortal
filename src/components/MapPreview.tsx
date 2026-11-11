@@ -35,9 +35,12 @@ export const MapPreview: React.FC<MapPreviewProps> = ({
       shadowSize: [41, 41]
     });
 
+    const safeLat = typeof lat === 'number' && !isNaN(lat) ? lat : 16.7348;
+    const safeLng = typeof lng === 'number' && !isNaN(lng) ? lng : 80.6198;
+
     if (!mapInstanceRef.current) {
       const map = L.map(containerRef.current, {
-        center: [lat, lng],
+        center: [safeLat, safeLng],
         zoom: zoom,
         zoomControl: false,
         attributionControl: false
@@ -50,13 +53,13 @@ export const MapPreview: React.FC<MapPreviewProps> = ({
       // Add zoom control in top right
       L.control.zoom({ position: 'topright' }).addTo(map);
 
-      const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+      const marker = L.marker([safeLat, safeLng], { icon: customIcon }).addTo(map);
       if (popupText) {
         marker.bindPopup(popupText).openPopup();
       }
 
       if (accuracy && accuracy > 0) {
-        L.circle([lat, lng], {
+        L.circle([safeLat, safeLng], {
           radius: accuracy,
           color: '#10b981',
           fillColor: '#34d399',
@@ -67,7 +70,7 @@ export const MapPreview: React.FC<MapPreviewProps> = ({
 
       mapInstanceRef.current = map;
     } else {
-      mapInstanceRef.current.setView([lat, lng], zoom);
+      mapInstanceRef.current.setView([safeLat, safeLng], zoom);
     }
 
     return () => {
